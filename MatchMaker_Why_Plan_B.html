@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MatchMaker — Why We Changed Approach</title>
+<style>
+  :root{
+    --ink:#101C26;
+    --ink-soft:#465866;
+    --paper:#F2F4F3;
+    --card:#FFFFFF;
+    --rule:#D3DAD8;
+    --dead:#B0453C;      /* Plan A — blocked */
+    --live:#0B6E62;      /* Plan B — works */
+    --amber:#B07D22;
+    --grid:#E2E7E5;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Charter","Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:17px; line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas",monospace}
+  .wrap{max-width:940px;margin:0 auto;padding:0 28px 100px}
+
+  /* ---- masthead ---- */
+  header{border-bottom:2px solid var(--ink);padding:56px 0 22px;margin-bottom:44px}
+  .eyebrow{
+    font-family:ui-monospace,Consolas,monospace;font-size:11.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px;
+  }
+  h1{
+    font-size:clamp(34px,5.4vw,54px);line-height:1.06;margin:0 0 16px;
+    font-weight:600;letter-spacing:-.02em;
+  }
+  .standfirst{font-size:20px;color:var(--ink-soft);max-width:64ch;margin:0}
+
+  /* ---- sections ---- */
+  section{margin:58px 0}
+  h2{
+    font-size:13px;font-family:ui-monospace,Consolas,monospace;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-soft);font-weight:600;
+    padding-bottom:9px;border-bottom:1px solid var(--rule);margin:0 0 26px;
+  }
+  h3{font-size:23px;margin:0 0 10px;font-weight:600;letter-spacing:-.01em}
+  p{margin:0 0 16px;max-width:70ch}
+  .lede{font-size:19px}
+
+  /* ---- funnel ---- */
+  .funnel{background:var(--card);border:1px solid var(--rule);padding:34px 30px 26px}
+  .fig-cap{
+    font-family:ui-monospace,Consolas,monospace;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--ink-soft);margin-top:18px;
+  }
+
+  /* ---- two plans ---- */
+  .plans{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .plan{background:var(--card);border:1px solid var(--rule);padding:26px 24px;position:relative}
+  .plan::before{content:"";position:absolute;top:0;left:0;right:0;height:4px}
+  .plan.a::before{background:var(--dead)}
+  .plan.b::before{background:var(--live)}
+  .tag{
+    display:inline-block;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+    letter-spacing:.13em;text-transform:uppercase;padding:4px 9px;margin-bottom:14px;
+    color:#fff;
+  }
+  .tag.a{background:var(--dead)} .tag.b{background:var(--live)}
+  .plan p{font-size:15.5px;margin-bottom:12px}
+  .verdict{
+    font-family:ui-monospace,Consolas,monospace;font-size:12.5px;padding-top:14px;
+    margin-top:6px;border-top:1px solid var(--rule);
+  }
+  .verdict.a{color:var(--dead)} .verdict.b{color:var(--live)}
+
+  /* ---- callout ---- */
+  .callout{
+    border-left:3px solid var(--amber);padding:4px 0 4px 22px;margin:34px 0;
+    font-size:19px;line-height:1.55;
+  }
+  .callout .src{
+    display:block;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;
+    letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);margin-top:12px;
+  }
+
+  /* ---- metric strip ---- */
+  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);
+           border:1px solid var(--rule)}
+  .metric{background:var(--card);padding:22px 20px}
+  .metric .n{font-size:38px;font-weight:600;letter-spacing:-.02em;line-height:1;color:var(--live)}
+  .metric .l{font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:.1em;
+             text-transform:uppercase;color:var(--ink-soft);margin-top:10px}
+  .metric .s{font-size:14px;color:var(--ink-soft);margin-top:8px;line-height:1.45}
+
+  /* ---- chart card ---- */
+  .chart{background:var(--card);border:1px solid var(--rule);padding:30px 28px 22px}
+
+  /* ---- honesty table ---- */
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--rule)}
+  th,td{text-align:left;padding:14px 18px;border-bottom:1px solid var(--grid);font-size:15.5px;
+        vertical-align:top}
+  th{font-family:ui-monospace,Consolas,monospace;font-size:11px;letter-spacing:.1em;
+     text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td.claim{font-weight:600;width:38%}
+
+  footer{margin-top:70px;padding-top:22px;border-top:2px solid var(--ink);
+         font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink-soft)}
+
+  @media(max-width:720px){
+    .plans{grid-template-columns:1fr}
+    .metrics{grid-template-columns:1fr}
+    body{font-size:16px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MatchMaker · Stage 1 · Decision Record</div>
+  <h1>The registry doesn't say who ran the trial.</h1>
+  <p class="standfirst">So we stopped trying to make it say that — and built something the data can actually support.</p>
+</header>
+
+<section>
+  <h2>What we set out to do</h2>
+  <p class="lede">MatchMaker helps our sales team find sponsors who are about to outsource a clinical trial, before the RFP goes out. Step one was teaching a model to recognise the difference between a trial a sponsor runs in-house and one they hand to a CRO.</p>
+  <p>To learn that difference, a model needs examples — trials where we already know the answer. The obvious place to look was ClinicalTrials.gov, the public registry where every industry trial is recorded. We pulled 2,000 of them.</p>
+</section>
+
+<section>
+  <h2>What we found instead</h2>
+  <div class="funnel">
+    <svg viewBox="0 0 840 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto" role="img" aria-label="Funnel: 2000 trials narrow to 372 with any collaborator listed, then to 28 that name a known CRO.">
+      <!-- bar 1 -->
+      <rect x="0" y="26" width="780" height="52" fill="#101C26"/>
+      <text x="16" y="58" fill="#F2F4F3" font-family="ui-monospace,Consolas,monospace" font-size="15" font-weight="600">2,000</text>
+      <text x="82" y="58" fill="#9FB0BC" font-family="ui-monospace,Consolas,monospace" font-size="12.5">industry trials pulled from the registry</text>
+      <text x="792" y="58" fill="#465866" font-family="ui-monospace,Consolas,monospace" font-size="12">100%</text>
+
+      <!-- connector -->
+      <path d="M0 78 L145 128 M780 78 L145 128" stroke="#D3DAD8" stroke-width="1" fill="none"/>
+
+      <!-- bar 2 -->
+      <rect x="0" y="128" width="145" height="52" fill="#465866"/>
+      <text x="14" y="160" fill="#F2F4F3" font-family="ui-monospace,Consolas,monospace" font-size="15" font-weight="600">372</text>
+      <text x="160" y="153" fill="#101C26" font-family="ui-monospace,Consolas,monospace" font-size="12.5">list any partner organisation at all</text>
+      <text x="160" y="171" fill="#465866" font-family="ui-monospace,Consolas,monospace" font-size="11.5">most of these are universities, funders or co-sponsors — not CROs</text>
+      <text x="792" y="160" fill="#465866" font-family="ui-monospace,Consolas,monospace" font-size="12">18.6%</text>
+
+      <!-- connector -->
+      <path d="M0 180 L11 230 M145 180 L11 230" stroke="#D3DAD8" stroke-width="1" fill="none"/>
+
+      <!-- bar 3 -->
+      <rect x="0" y="230" width="11" height="52" fill="#B0453C"/>
+      <text x="26" y="255" fill="#B0453C" font-family="ui-monospace,Consolas,monospace" font-size="15" font-weight="600">28</text>
+      <text x="62" y="255" fill="#101C26" font-family="ui-monospace,Consolas,monospace" font-size="12.5">actually name a CRO we recognise</text>
+      <text x="26" y="273" fill="#465866" font-family="ui-monospace,Consolas,monospace" font-size="11.5">PPD · Parexel · Fortrea · Covance · PRA · Avania</text>
+      <text x="792" y="255" fill="#B0453C" font-family="ui-monospace,Consolas,monospace" font-size="12">1.4%</text>
+    </svg>
+    <div class="fig-cap">Fig. 1 — Every industry trial we pulled, narrowed to those that identify their CRO</div>
+  </div>
+
+  <div class="callout">
+    Roughly three in four clinical trials are outsourced to a CRO. Our registry sample identifies one in seventy. The registry records who <em>paid</em> for a trial, not who <em>ran</em> it.
+    <span class="src">Measured on 2,000 industry trials · ClinicalTrials.gov API v2</span>
+  </div>
+</section>
+
+<section>
+  <h2>The two approaches</h2>
+  <div class="plans">
+    <div class="plan a">
+      <span class="tag a">Plan A · abandoned</span>
+      <h3>Learn from labelled examples</h3>
+      <p>Treat every trial naming a CRO as a confirmed outsourcing case, every trial without one as in-house, and let the model learn the pattern between them.</p>
+      <p>This is the textbook approach, and it's what we assumed we'd do.</p>
+      <p>It needs roughly 30 clean examples of each outcome to produce anything trustworthy. We had 28 on one side — and no way to know whether the other 1,972 were genuinely in-house or simply undocumented.</p>
+      <div class="verdict a">Blocked — the examples don't exist, and the ones that do aren't a fair sample</div>
+    </div>
+    <div class="plan b">
+      <span class="tag b">Plan B · adopted</span>
+      <h3>Score against known drivers</h3>
+      <p>Skip the guesswork. Build a transparent score from the five things the industry already knows drive outsourcing: number of trial sites, enrolment size, how much clinical infrastructure the sponsor has, trial phase, and therapeutic complexity.</p>
+      <p>Then check that score against the 28 trials we <em>can</em> confirm — using them to test the score rather than to train it.</p>
+      <p>Nothing is invented, every input is defensible, and a rep can see exactly why an account ranked where it did.</p>
+      <div class="verdict b">Adopted — honest, explainable, and testable against real cases</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Does Plan B actually work</h2>
+  <div class="metrics">
+    <div class="metric">
+      <div class="n">1.79×</div>
+      <div class="l">Top-decile lift</div>
+      <div class="s">Trials in our highest-scoring 10% are 1.79 times more likely to be confirmably CRO-run.</div>
+    </div>
+    <div class="metric">
+      <div class="n">5</div>
+      <div class="l">Inputs, all visible</div>
+      <div class="s">No black box. Every score decomposes into five weighted factors a rep can read.</div>
+    </div>
+    <div class="metric">
+      <div class="n">262</div>
+      <div class="l">Trials re-attributed</div>
+      <div class="s">Genentech to Roche, Celgene to BMS, Shire to Takeda — so account rollups are correct.</div>
+    </div>
+  </div>
+
+  <p style="margin-top:30px">The strongest evidence isn't a statistic — it's who the score puts at the top. Loxo Oncology, BeiGene, MacroGenics, Astex, Adamas: small and mid-size oncology biotechs running Phase 3 trials across 70 to 190 sites. These are companies with deep science and no global clinical operations arm. They are exactly the profile that has to outsource, and the score found them without being told what to look for.</p>
+</section>
+
+<section>
+  <h2>Is it just picking Phase 3 trials</h2>
+  <div class="chart">
+    <svg viewBox="0 0 840 250" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto" role="img" aria-label="Average outsourcing score rises from 0.390 in Phase 1 to 0.607 in Phase 3, then falls to 0.449 in Phase 4.">
+      <line x1="60" y1="200" x2="800" y2="200" stroke="#101C26" stroke-width="1.5"/>
+      <g font-family="ui-monospace,Consolas,monospace" font-size="10.5" fill="#465866">
+        <line x1="60" y1="140" x2="800" y2="140" stroke="#E2E7E5"/><text x="20" y="144">0.30</text>
+        <line x1="60" y1="90"  x2="800" y2="90"  stroke="#E2E7E5"/><text x="20" y="94">0.45</text>
+        <line x1="60" y1="40"  x2="800" y2="40"  stroke="#E2E7E5"/><text x="20" y="44">0.60</text>
+      </g>
+      <!-- bars: y = 200 - (score-0.15)*333 -->
+      <g>
+        <rect x="110" y="120" width="96" height="80" fill="#8FA3AE"/>
+        <text x="158" y="112" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="13" font-weight="600" fill="#101C26">0.390</text>
+        <text x="158" y="220" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="11.5" fill="#465866">PHASE 1</text>
+        <text x="158" y="236" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10.5" fill="#8FA3AE">553 trials</text>
+      </g>
+      <g>
+        <rect x="270" y="75" width="96" height="125" fill="#4C8C86"/>
+        <text x="318" y="67" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="13" font-weight="600" fill="#101C26">0.525</text>
+        <text x="318" y="220" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="11.5" fill="#465866">PHASE 2</text>
+        <text x="318" y="236" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10.5" fill="#8FA3AE">339 trials</text>
+      </g>
+      <g>
+        <rect x="430" y="48" width="96" height="152" fill="#0B6E62"/>
+        <text x="478" y="40" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="13" font-weight="600" fill="#101C26">0.607</text>
+        <text x="478" y="220" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="11.5" fill="#465866">PHASE 3</text>
+        <text x="478" y="236" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10.5" fill="#8FA3AE">392 trials</text>
+      </g>
+      <g>
+        <rect x="590" y="100" width="96" height="100" fill="#8FA3AE"/>
+        <text x="638" y="92" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="13" font-weight="600" fill="#101C26">0.449</text>
+        <text x="638" y="220" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="11.5" fill="#465866">PHASE 4</text>
+        <text x="638" y="236" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10.5" fill="#8FA3AE">104 trials</text>
+      </g>
+    </svg>
+    <div class="fig-cap">Fig. 2 — Average outsourcing score by trial phase</div>
+  </div>
+
+  <p style="margin-top:26px">Phase clearly matters, and it should: late-stage trials are bigger, longer and more expensive to run, so they get outsourced more often. The curve rises through Phase 3 and drops at Phase 4, which is what anyone in the industry would predict.</p>
+  <p><strong>But phase alone doesn't decide the ranking.</strong> Phase counts for 15% of the score. Of our 392 Phase 3 trials, only 116 reached the top-scoring 10% — meaning seven in ten Phase 3 trials did <em>not</em> make the list. Site count and sponsor infrastructure are what separate them.</p>
+</section>
+
+<section>
+  <h2>What we will and won't claim</h2>
+  <table>
+    <tr><th>The claim</th><th>Where it stands</th></tr>
+    <tr>
+      <td class="claim">The registry rarely identifies the CRO</td>
+      <td>Measured directly: 1.4% of 2,000 trials. This is our finding, not a citation.</td>
+    </tr>
+    <tr>
+      <td class="claim">Our score ranks CRO-run trials higher</td>
+      <td>Directionally yes — 1.79× lift in the top decile, and the separation runs the right way.</td>
+    </tr>
+    <tr>
+      <td class="claim">That result is statistically proven</td>
+      <td><strong>No.</strong> With 28 confirmable cases the margin of error is wide. We report it as directional and say so.</td>
+    </tr>
+    <tr>
+      <td class="claim">The 28 are a fair sample of CRO-run trials</td>
+      <td><strong>No.</strong> Trials that name their CRO are unusual by definition. Useful as a sanity check, not as proof.</td>
+    </tr>
+    <tr>
+      <td class="claim">Public data can identify who wins the deal</td>
+      <td><strong>No — and that's the point.</strong> Only our own win/loss history can. That's Stage 2, and it's the part no competitor can copy.</td>
+    </tr>
+  </table>
+</section>
+
+<section>
+  <h2>Why this makes the case stronger</h2>
+  <p class="lede">We set out to prove a model could read the registry and tell us who outsources. What we proved is that the registry can't tell anyone that — and we have the number to back it up.</p>
+  <p>Citeline, GlobalData and Salesmotion all mine the same public sources we do. They hit the same 1.4% ceiling. Public data can tell you a trial is coming and roughly how likely it is to be outsourced. It cannot tell you who will win the work.</p>
+  <p>That answer sits in Medidata's Salesforce win/loss history — who we bid against, who won, and why we lost. Stage 1 finds the accounts worth calling. Stage 2 is where the advantage lives.</p>
+</section>
+
+<footer>
+  Stage 1 built on 2,000 industry trials · ClinicalTrials.gov API v2 · public domain<br>
+  No customer or CRM data used in this analysis
+</footer>
+
+</div>
+</body>
+</html>
